@@ -53,7 +53,8 @@ ORDER BY avg_delivery_time ASC
 LIMIT 5
 
 -- 8. Identify the top 5 customers who spent the most on orders, including product price and freight costs.
-SELECT c.customer_unique_id, SUM(oi.price + oi.freight_value) AS total_spend FROM orders o
+SELECT c.customer_unique_id, SUM(oi.price + oi.freight_value) AS total_spend 
+FROM orders o
 JOIN customers c
 ON o.customer_id = c.customer_id
 JOIN order_items oi
@@ -64,7 +65,8 @@ LIMIT 5
 
 -- 9. Find the monthly total revenue for each month in 2018, sorted chronologically.
 SELECT to_char(o.order_purchase_timestamp,'YYYY-MM') AS month,
-SUM(op.payment_value) AS payments_received FROM order_payments op
+SUM(op.payment_value) AS payments_received 
+FROM order_payments op
 JOIN orders o
 ON op.order_id = o.order_id
 WHERE to_char(o.order_purchase_timestamp, 'YYYY') = '2018'
@@ -82,4 +84,47 @@ GROUP BY oi.seller_id
 HAVING AVG(ors.review_score) < 3
 ORDER BY order_count DESC
 
+-- 11. Identify repeat customers who have made more than one purchase and count their total orders.
+SELECT c.customer_unique_id, 
+COUNT(*) AS total_orders 
+FROM orders o
+LEFT JOIN customers c
+ON o.customer_id = c.customer_id
+GROUP BY c.customer_unique_id
+HAVING COUNT(*) > 1
+ORDER BY total_orders DESC
+LIMIT 10
 
+-- 12.Rank sellers by their total revenue within each state using window functions.
+WITH customer_orders AS (
+    SELECT o.order_id, c.customer_state 
+    FROM olist_customers_dataset c
+    JOIN olist_orders_dataset o 
+    ON o.customer_id = c.customer_id
+),
+order_info AS (
+    SELECT 
+        oi.seller_id, 
+        co.customer_state, 
+        SUM(oi.price + oi.freight_value) AS revenue 
+    FROM olist_order_items_dataset oi
+    JOIN customer_orders co 
+    ON oi.order_id = co.order_id
+    GROUP BY co.customer_state, oi.seller_id
+)
+SELECT 
+    seller_id, 
+    customer_state, 
+    revenue, 
+    RANK() OVER(PARTITION BY customer_state ORDER BY revenue DESC) AS state_rank 
+FROM order_info;
+
+
+-- 13. Calculate the percentage of late deliveries by comparing the estimated and actual delivery times.
+SELECT 
+    ROUND(
+        (COUNT(order_id) * 100.0) / (SELECT COUNT(*) FROM orders WHERE order_estimated_delivery_date IS NOT NULL), 
+        2
+    ) AS late_delivery_percentage
+FROM orders
+WHERE order_delivered_customer_date > order_estimated_delivery_date;
