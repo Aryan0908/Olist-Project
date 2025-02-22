@@ -128,3 +128,19 @@ SELECT
     ) AS late_delivery_percentage
 FROM orders
 WHERE order_delivered_customer_date > order_estimated_delivery_date;
+
+-- 14.  Identify the most frequently used number of payment installments and its percentage of total payments.
+With my_cte AS (
+SELECT payment_installments, 
+(COUNT(*)/SUM(COUNT(*) ) OVER())*100 AS percent_share 
+FROM order_payments op
+WHERE payment_installments != 1
+GROUP BY payment_installments
+)
+
+SELECT payment_installments, ROUND(percent_share,2) AS percent_share FROM my_cte
+ORDER BY percent_share DESC
+LIMIT 1
+
+
+-- 15.
