@@ -143,4 +143,35 @@ ORDER BY percent_share DESC
 LIMIT 1
 
 
--- 15.
+-- 15. Find the percentage of orders that received a 5-star review and compare it to other review scores.
+WITH my_cte AS (
+SELECT review_score, 
+COUNT(order_id) AS total_orders, 
+COUNT(order_id) *100.0 / SUM(COUNT(order_id)) OVER() AS order_percent
+FROM order_reviews
+GROUP BY review_score
+)
+
+SELECT review_score, total_orders, ROUND(order_percent,2) FROM my_cte
+ORDER BY review_score DESC
+
+-- YOY
+-- year on year analysics
+
+WITH yoy_revenue AS (
+SELECT Extract(year from order_purchase_timestamp) AS year, 
+	SUM(payment_value) AS total_revenue
+FROM order_payments op
+LEFT JOIN orders o
+	ON op.order_id = o.order_id
+GROUP BY Extract(year from order_purchase_timestamp)
+),
+
+yoy_revenue_growth AS (
+SELECT year, total_revenue, 
+	   total_revenue - COALESCE(LAG(total_revenue) OVER(),0)  FROM yoy_revenue
+)
+
+
+
+SELECT * FROM yoy_revenue_growth
