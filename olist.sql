@@ -160,18 +160,47 @@ ORDER BY review_score DESC
 
 WITH yoy_revenue AS (
 SELECT Extract(year from order_purchase_timestamp) AS year, 
-	SUM(payment_value) AS total_revenue
+SUM(payment_value) AS total_revenue
 FROM order_payments op
 LEFT JOIN orders o
-	ON op.order_id = o.order_id
+ON op.order_id = o.order_id
 GROUP BY Extract(year from order_purchase_timestamp)
 ),
-
 yoy_revenue_growth AS (
-SELECT year, total_revenue, 
-	   total_revenue - COALESCE(LAG(total_revenue) OVER(),0)  FROM yoy_revenue
+SELECT year, 
+total_revenue, 
+ROUND(revenue_growth / COALESCE(LAG(total_revenue) OVER(), total_revenue),2) AS percent_revenue_growth
+FROM (SELECT year, 
+total_revenue, 
+total_revenue - COALESCE(LAG(total_revenue) OVER(),total_revenue) AS revenue_growth
+FROM yoy_revenue)
+),
+yoy_orders AS (
+SELECT Extract(year from order_purchase_timestamp) AS year,
+COUNT(order_id) AS total_orders,
+COUNT(order_id) - COALESCE(LAG(COUNT(order_id)) OVER(), COUNT(order_id)) AS orders_growth
+FROM orders
+GROUP BY Extract(year from order_purchase_timestamp)
+),
+yoy_orders_growth AS (
+SELECT year, total_orders, 
+ROUND(orders_growth * 1.1 / COALESCE(LAG(total_orders) OVER(), total_orders),2) AS percent_order_growth
+FROM yoy_orders
 )
 
-
-
-SELECT * FROM yoy_revenue_growth
+SELECT yoy_rg.year, 
+yoy_rg.total_revenue, 
+CASE 
+	WHEN yoy_rg.percent_revenue_growth > 1 
+	THEN  yoy_rg.percent_revenue_growth 
+	ELSE yoy_rg.percent_revenue_growth *100
+END AS percent_revenue_growth,
+yoy_og.total_orders,
+CASE 
+	WHEN yoy_og.percent_order_growth > 1 
+	THEN  yoy_og.percent_order_growth 
+	ELSE yoy_og.percent_order_growth *100
+END AS percent_order_growth
+FROM yoy_revenue_growth AS yoy_rg
+INNER JOIN yoy_orders_growth AS yoy_og
+ON yoy_og.year = yoy_rg.year
