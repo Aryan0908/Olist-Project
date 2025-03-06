@@ -156,7 +156,8 @@ SELECT review_score, total_orders, ROUND(order_percent,2) FROM my_cte
 ORDER BY review_score DESC
 
 -- YOY
--- year on year analysics
+-- year on year analysics of revenue and year growth
+
 
 WITH yoy_revenue AS (
 SELECT Extract(year from order_purchase_timestamp) AS year, 
@@ -186,7 +187,13 @@ yoy_orders_growth AS (
 SELECT year, total_orders, 
 ROUND(orders_growth * 1.1 / COALESCE(LAG(total_orders) OVER(), total_orders),2) AS percent_order_growth
 FROM yoy_orders
-)
+),
+avg_delivery_time AS (
+SELECT Extract(year from order_purchase_timestamp) AS year,
+ROUND(AVG(EXTRACT(EPOCH FROM order_delivered_customer_date - order_purchase_timestamp) / 86400), 1) AS average_delivery_time
+FROM orders o
+WHERE order_delivered_customer_date IS NOT null
+GROUP BY Extract(year from order_purchase_timestamp))
 
 SELECT yoy_rg.year, 
 yoy_rg.total_revenue, 
@@ -200,7 +207,34 @@ CASE
 	WHEN yoy_og.percent_order_growth > 1 
 	THEN  yoy_og.percent_order_growth 
 	ELSE yoy_og.percent_order_growth *100
-END AS percent_order_growth
+END AS percent_order_growth,
+yoy_adt.average_delivery_time
 FROM yoy_revenue_growth AS yoy_rg
 INNER JOIN yoy_orders_growth AS yoy_og
 ON yoy_og.year = yoy_rg.year
+INNER JOIN avg_delivery_time AS yoy_adt
+ON yoy_adt.year = yoy_og.year 
+
+
+-- YOY top performaning categories
+WITH my_cte AS (
+SELECT Extract(year from order_purchase_timestamp) AS year,
+       product_category_name,
+       COUNT(oi.order_id) as total_orders,
+       SUM(price + freight_value) as revenue
+FROM orders o
+LEFT JOIN order_items oi
+ON o.order_id = oi.order_id
+LEFT JOIN products p
+ON oi.product_id = p.product_id
+GROUP BY Extract(year from order_purchase_timestamp), product_category_name)
+
+SELECT year,product_category_name, total_orders, revenue FROM 
+(SELECT year,
+	product_category_name, 
+	total_orders, revenue, 
+	ROW_NUMBER() OVER(PARTITION BY year ORDER BY revenue DESC) as rank 
+FROM my_cte)
+
+WHERE rank <= 3
+ORDER BY year ASC, revenue DESC
