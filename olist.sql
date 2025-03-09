@@ -3,12 +3,18 @@ SELECT COUNT(DISTINCT customer_unique_id) AS unique_customers
 FROM customers
 
 -- 2. List the different order statuses along with the count of orders in each status.
-SELECT order_status, COUNT(*) AS order_count FROM orders
+SELECT 
+	order_status, 
+	COUNT(*) AS order_count 
+FROM orders
 GROUP BY order_status
 ORDER BY order_count DESC
 
 -- 3. Find the top 5 states with the highest number of customers.
-SELECT customer_state, COUNT(*) AS customer_count FROM customers
+SELECT 
+	customer_state, 
+	COUNT(*) AS customer_count 
+FROM customers
 GROUP BY customer_state
 ORDER BY customer_count DESC
 LIMIT 5
@@ -218,7 +224,8 @@ ON yoy_adt.year = yoy_og.year
 
 -- YOY top performaning categories
 WITH my_cte AS (
-SELECT Extract(year from order_purchase_timestamp) AS year,
+SELECT 
+       Extract(year from order_purchase_timestamp) AS year,
        product_category_name,
        COUNT(oi.order_id) as total_orders,
        SUM(price + freight_value) as revenue
@@ -238,3 +245,106 @@ FROM my_cte)
 
 WHERE rank <= 3
 ORDER BY year ASC, revenue DESC
+
+
+-- NAKING MATERIALISED VIEW FOR ORDERS
+CREATE MATERIALIZED VIEW v_orders AS 
+SELECT 
+	o.order_id,
+	DENSE_RANK() OVER(ORDER BY o.order_id) AS temp_order_id,
+	INITCAP(o.order_status) AS order_status,
+	c.temp_customer_id,
+	o.order_purchase_timestamp,
+	to_char(order_purchase_timestamp, 'YYYY-MM-DD') AS order_purchase_date,
+	CAST((order_purchase_timestamp) AS time) AS order_purchase_time,
+	o.order_approved_at,
+	o.order_delivered_carrier_date,
+	o.order_delivered_customer_date,
+	o.order_estimated_delivery_date,
+	CASE 
+		WHEN order_delivered_customer_date IS NULL THEN null
+		WHEN order_estimated_delivery_date > order_delivered_customer_date THEN 'On Time'
+		ELSE 'Late' 
+	END AS type,
+	EXTRACT(DAY FROM o.order_delivered_customer_date - o.order_purchase_timestamp) AS delivery_time
+
+FROM (
+	SELECT * FROM orders
+	ORDER BY order_purchase_timestamp
+	) AS o
+LEFT JOIN v_customers AS c
+ON c.customer_id = o.customer_id
+
+-- NAKING MATERIALISED VIEW FOR Product Table
+CREATE MATERIALIZED VIEW v_products AS
+SELECT product_id,
+	   DENSE_RANK() OVER(ORDER BY product_id) AS temp_product_id,
+       INITCAP(product_category_name) AS product_category_name,
+       product_name_length AS product_name_length,
+       product_description_length AS product_description_length,
+       product_photos_qty,
+       product_weight_g,
+       product_length_cm,
+       product_height_cm,
+       product_width_cm
+FROM products;
+
+
+-- MNAKING MATERIALISED VIEW FOR Order Items Table
+CREATE MATERIALIZED VIEW v_order_items AS
+SELECT 
+	vo.temp_order_id, 
+	oi.order_item_id, 
+	vp.temp_product_id, 
+	vs.temp_seller_id, 
+	oi.shipping_limit_date,
+	oi.price,
+	oi.freight_value,
+	(COALESCE(oi.price,0) + COALESCE(oi.freight_value,0)) AS total_cost
+FROM order_items AS oi
+LEFT JOIN v_orders AS vo
+ON oi.order_id = vo.order_id
+LEFT JOIN v_products AS vp
+ON oi.product_id = vp.product_id
+LEFT JOIN v_sellers AS vs
+ON oi.seller_id = vs.seller_id
+
+
+-- MNAKING MATERIALISED VIEW FOR Order Payments Table
+CREATE MATERIALIZED VIEW v_order_payments AS
+SELECT 
+	vo.temp_order_id,
+	payment_sequential,
+	INITCAP(REPLACE(payment_type, '_', ' ')) AS payment_type,
+	payment_installments,
+	CASE
+	    WHEN payment_installments > 1 THEN 'Multi'
+	    ELSE 'Single'
+	    END AS installment_type,
+	payment_value
+
+FROM order_payments op
+LEFT JOIN v_orders vo
+ON op.order_id = vo.order_id
+
+
+-- MNAKING MATERIALISED VIEW FOR Order Reviews Table
+CREATE MATERIALIZED VIEW v_order_reviews AS
+SELECT
+ors.review_id,
+DENSE_RANK() OVER(ORDER BY ors.review_id) AS temp_review_id,
+vo.temp_order_id,
+ors.review_score,
+CASE
+	WHEN ors.review_score > 3 THEN 'High'
+	WHEN ors.review_score = 3 THEN 'Average'
+	ELSE 'Low' END
+	AS consumer_satisfaction,
+COALESCE(ors.review_comment_title, '') AS review_comment_title,
+COALESCE(ors.review_comment_message, '') AS review_comment_message,
+review_creation_date,
+review_answer_timestamp
+
+FROM order_reviews AS ors
+LEFT JOIN v_orders AS vo
+ON ors.order_id = vo.order_id
