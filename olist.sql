@@ -276,17 +276,17 @@ LEFT JOIN v_customers AS c
 ON c.customer_id = o.customer_id
 
 -- NAKING MATERIALISED VIEW FOR Product Table
-CREATE MATERIALIZED VIEW v_products AS
+
 SELECT product_id,
 	   DENSE_RANK() OVER(ORDER BY product_id) AS temp_product_id,
-       INITCAP(product_category_name) AS product_category_name,
-       product_name_length AS product_name_length,
-       product_description_length AS product_description_length,
-       product_photos_qty,
-       product_weight_g,
-       product_length_cm,
-       product_height_cm,
-       product_width_cm
+       INITCAP(REPLACE(COALESCE(product_category_name,'Others'), '_', " ")) AS product_category_name,
+       COALESCE(product_name_length,'NA') AS product_name_length,
+       COALESCE(product_description_length,'NA') AS product_description_length,
+       COALESCE(product_photos_qty, 'NA'),
+       COALESCE(product_weight_g,'NA'),
+       COALESCE(product_length_cm,'NA'),
+       COALESCE(product_height_cm,'NA'),
+       COALESCE(product_width_cm,'NA')
 FROM products;
 
 
