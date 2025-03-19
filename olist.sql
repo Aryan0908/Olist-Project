@@ -365,3 +365,17 @@ FROM (
 ) sub
 WHERE row_num = 1;
 
+
+-- MNAKING MATERIALISED VIEW Name Translation
+CREATE MATERIALIZED VIEW v_name_translation AS
+
+SELECT 
+DISTINCT(INITCAP(REPLACE(p.product_category_name,'_', ' '))) AS product_category_name,
+COALESCE(
+	INITCAP(REPLACE(product_category_name_english,'_',' ')),
+	INITCAP(REPLACE(p.product_category_name,'_', ' '))
+	)  AS product_category_name_english
+FROM products AS p
+LEFT JOIN name_translation AS nt
+ON nt.product_category_name = p.product_category_name
+
