@@ -348,3 +348,20 @@ review_answer_timestamp
 FROM order_reviews AS ors
 LEFT JOIN v_orders AS vo
 ON ors.order_id = vo.order_id
+
+
+-- MNAKING MATERIALISED VIEW FOR New Customer Table
+CREATE MATERIALIZED VIEW v_new_customers AS
+SELECT temp_customer_unique_id, order_purchase_timestamp
+FROM (
+    SELECT 
+        c.customer_unique_id,
+		c.temp_customer_unique_id,
+        o.order_purchase_timestamp,
+        ROW_NUMBER() OVER (PARTITION BY c.customer_unique_id ORDER BY o.order_purchase_timestamp) AS row_num
+    FROM v_customers c
+    INNER JOIN orders o 
+    ON o.customer_id = c.customer_id
+) sub
+WHERE row_num = 1;
+
