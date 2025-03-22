@@ -266,7 +266,7 @@ SELECT
 		WHEN order_estimated_delivery_date > order_delivered_customer_date THEN 'On Time'
 		ELSE 'Late' 
 	END AS type,
-	EXTRACT(DAY FROM o.order_delivered_customer_date - o.order_purchase_timestamp) AS delivery_time
+	EXTRACT(DAY FROM o.order_delivered_customer_date - o.order_purchase_timestamp) + 1 AS delivery_time
 
 FROM (
 	SELECT * FROM orders
