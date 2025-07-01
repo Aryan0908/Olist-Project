@@ -71,7 +71,7 @@ ORDER BY avg_delivery_time_days
 
 
 -- 8. Identify the top 5 customers who spent the most on orders, including product price and freight costs.
-SELECT c.customer_unique_id, SUM(oi.price + oi.freight_value) AS total_spend 
+SELECT c.customer_unique_id, COALESCE(SUM(oi.price + oi.freight_value),0) AS total_spend 
 FROM orders o
 JOIN customers c
 ON o.customer_id = c.customer_id
