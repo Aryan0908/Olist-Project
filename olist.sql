@@ -56,20 +56,19 @@ ORDER BY percent_share DESC
 
 -- 7. Determine the average delivery time (in days) per state and rank states based on fastest deliveries.
 WITH my_cte AS (
-SELECT customer_id, 
-DATE(order_delivered_customer_date) - DATE(order_purchase_timestamp) AS delivery_time 
+SELECT customer_id,
+DATE(order_delivered_customer_date) - DATE(order_purchase_timestamp) as delivery_time 
 FROM orders
 WHERE order_delivered_customer_date IS NOT NULL
 )
 
-SELECT customers.customer_state, 
-ROUND(AVG(my_cte.delivery_time),2) AS avg_delivery_time 
-FROM customers
-INNER JOIN my_cte
-ON customers.customer_id = my_cte.customer_id
-GROUP BY customers.customer_state
-ORDER BY avg_delivery_time ASC
-LIMIT 5
+SELECT c.customer_state, ROUND(AVG(cte.delivery_time),0) AS avg_delivery_time_days 
+FROM customers AS c
+INNER JOIN my_cte AS cte
+ON cte.customer_id = c.customer_id
+GROUP BY c.customer_state
+ORDER BY avg_delivery_time_days
+
 
 -- 8. Identify the top 5 customers who spent the most on orders, including product price and freight costs.
 SELECT c.customer_unique_id, SUM(oi.price + oi.freight_value) AS total_spend 
