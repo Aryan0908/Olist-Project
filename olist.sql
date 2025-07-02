@@ -20,7 +20,8 @@ ORDER BY customer_count DESC
 LIMIT 5
 
 -- 4  Identify the top-selling product categories based on the total number of items sold.
-SELECT products.product_category_name, COUNT(*) AS total_orders FROM products
+SELECT products.product_category_name, 
+	COUNT(*) AS total_orders FROM products
 LEFT JOIN order_items
 ON products.product_id = order_items.product_id
 GROUP BY  products.product_category_name
@@ -48,8 +49,8 @@ LIMIT 5
 
 -- 6. Find the most common payment type and its percentage of total transactions.
 SELECT payment_type,
-COUNT(*) AS total_transaction,
-ROUND((COUNT(*) * 1.0 /(SELECT COUNT(*) FROM order_payments)) * 100,2) AS percent_share
+	COUNT(*) AS total_transaction,
+	ROUND((COUNT(*) * 1.0 /(SELECT COUNT(*) FROM order_payments)) * 100,2) AS percent_share
 FROM order_payments
 GROUP BY payment_type
 ORDER BY percent_share DESC
@@ -57,12 +58,13 @@ ORDER BY percent_share DESC
 -- 7. Determine the average delivery time (in days) per state and rank states based on fastest deliveries.
 WITH my_cte AS (
 SELECT customer_id,
-DATE(order_delivered_customer_date) - DATE(order_purchase_timestamp) as delivery_time 
+	DATE(order_delivered_customer_date) - DATE(order_purchase_timestamp) as delivery_time 
 FROM orders
 WHERE order_delivered_customer_date IS NOT NULL
 )
 
-SELECT c.customer_state, ROUND(AVG(cte.delivery_time),0) AS avg_delivery_time_days 
+SELECT c.customer_state, 
+	ROUND(AVG(cte.delivery_time),0) AS avg_delivery_time_days 
 FROM customers AS c
 INNER JOIN my_cte AS cte
 ON cte.customer_id = c.customer_id
@@ -71,7 +73,8 @@ ORDER BY avg_delivery_time_days
 
 
 -- 8. Identify the top 5 customers who spent the most on orders, including product price and freight costs.
-SELECT c.customer_unique_id, COALESCE(SUM(oi.price + oi.freight_value),0) AS total_spend 
+SELECT c.customer_unique_id, 
+	COALESCE(SUM(oi.price + oi.freight_value),0) AS total_spend 
 FROM orders o
 JOIN customers c
 ON o.customer_id = c.customer_id
@@ -82,19 +85,19 @@ ORDER BY total_spend DESC
 LIMIT 5
 
 -- 9. Find the monthly total revenue for each month in 2018, sorted chronologically.
-SELECT to_char(o.order_purchase_timestamp,'YYYY-MM') AS month,
-SUM(op.payment_value) AS payments_received 
-FROM order_payments op
-JOIN orders o
+SELECT to_char(o.order_purchase_timestamp,'MM-YYYY') AS month, 
+	SUM(payment_value) AS total_revenue 
+FROM orders AS o
+INNER JOIN order_payments AS op
 ON op.order_id = o.order_id
 WHERE to_char(o.order_purchase_timestamp, 'YYYY') = '2018'
-GROUP BY to_char(o.order_purchase_timestamp,'YYYY-MM')
-ORDER BY month
+GROUP BY month
+
 
 -- 10. Determine which sellers have an average review score below 3.0, along with their total number of orders.
 SELECT oi.seller_id, 
-ROUND(AVG(COALESCE(ors.review_score,0)),1) AS avg_score, 
-COUNT(DISTINCT oi.order_id) AS order_count 
+	ROUND(AVG(COALESCE(ors.review_score,0)),1) AS avg_score, 
+	COUNT(DISTINCT oi.order_id) AS order_count 
 FROM order_items oi
 LEFT JOIN order_reviews AS ors
 ON oi.order_id = ors.order_id
@@ -104,20 +107,20 @@ ORDER BY order_count DESC
 
 -- 11. Identify repeat customers who have made more than one purchase and count their total orders.
 SELECT c.customer_unique_id, 
-COUNT(*) AS total_orders 
-FROM orders o
-LEFT JOIN customers c
+	COUNT(DISTINCT(order_id)) AS total_orders 
+FROM customers AS c
+INNER JOIN orders AS o
 ON o.customer_id = c.customer_id
 GROUP BY c.customer_unique_id
-HAVING COUNT(*) > 1
+HAVING COUNT(DISTINCT(order_id)) > 1
 ORDER BY total_orders DESC
 LIMIT 10
 
 -- 12.Rank sellers by their total revenue within each state using window functions.
 WITH customer_orders AS (
     SELECT o.order_id, c.customer_state 
-    FROM olist_customers_dataset c
-    JOIN olist_orders_dataset o 
+    FROM customers c
+    JOIN orders o 
     ON o.customer_id = c.customer_id
 ),
 order_info AS (
@@ -125,18 +128,23 @@ order_info AS (
         oi.seller_id, 
         co.customer_state, 
         SUM(oi.price + oi.freight_value) AS revenue 
-    FROM olist_order_items_dataset oi
+    FROM order_items oi
     JOIN customer_orders co 
     ON oi.order_id = co.order_id
     GROUP BY co.customer_state, oi.seller_id
+),
+sellers_rank AS (
+	SELECT
+	    seller_id, 
+	    customer_state, 
+	    revenue, 
+	    RANK() OVER(PARTITION BY customer_state ORDER BY revenue DESC) AS state_rank 
+	FROM order_info
 )
-SELECT 
-    seller_id, 
-    customer_state, 
-    revenue, 
-    RANK() OVER(PARTITION BY customer_state ORDER BY revenue DESC) AS state_rank 
-FROM order_info;
 
+SELECT * FROM sellers_rank
+WHERE state_rank <=5
+	
 
 -- 13. Calculate the percentage of late deliveries by comparing the estimated and actual delivery times.
 SELECT 
@@ -145,18 +153,17 @@ SELECT
         2
     ) AS late_delivery_percentage
 FROM orders
-WHERE order_delivered_customer_date > order_estimated_delivery_date;
+WHERE 
+	order_estimated_delivery_date IS NOT NULL AND 
+	order_delivered_customer_date IS NOT NULL AND 
+	order_delivered_customer_date > order_estimated_delivery_date;
 
 -- 14.  Identify the most frequently used number of payment installments and its percentage of total payments.
-With my_cte AS (
-SELECT payment_installments, 
-(COUNT(*)/SUM(COUNT(*) ) OVER())*100 AS percent_share 
-FROM order_payments op
-WHERE payment_installments != 1
+SELECT payment_installments,
+	ROUND((COUNT(*) * 100.00/(SELECT COUNT(*) FROM order_payments WHERE payment_value IS NOT NULL)),2) AS percent_share
+FROM order_payments
+WHERE payment_value IS NOT NULL
 GROUP BY payment_installments
-)
-
-SELECT payment_installments, ROUND(percent_share,2) AS percent_share FROM my_cte
 ORDER BY percent_share DESC
 LIMIT 1
 
