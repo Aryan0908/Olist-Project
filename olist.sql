@@ -398,3 +398,13 @@ FROM products AS p
 LEFT JOIN name_translation AS nt
 ON nt.product_category_name = p.product_category_name
 
+-- Making Materialised view of customers
+ SELECT customer_id,
+    DENSE_RANK() OVER (ORDER BY customer_id) AS temp_customer_id,
+    customer_unique_id,
+    DENSE_RANK() OVER (ORDER BY customer_unique_id) AS temp_customer_unique_id,
+    customer_zip_code_prefix,
+    initcap(customer_city) AS customer_city,
+    customer_state
+   FROM customers c;
+
