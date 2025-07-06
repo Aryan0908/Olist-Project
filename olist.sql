@@ -272,6 +272,7 @@ SELECT
 	o.order_id,
 	DENSE_RANK() OVER(ORDER BY o.order_id) AS temp_order_id,
 	INITCAP(o.order_status) AS order_status,
+	c.customer_id,
 	c.temp_customer_id,
 	o.order_purchase_timestamp,
 	to_char(order_purchase_timestamp, 'YYYY-MM-DD') AS order_purchase_date,
@@ -295,27 +296,29 @@ LEFT JOIN v_customers AS c
 ON c.customer_id = o.customer_id
 
 -- NAKING MATERIALISED VIEW FOR Product Table
-
+CREATE MATERIALIZED VIEW v_products AS 
 SELECT product_id,
 	   DENSE_RANK() OVER(ORDER BY product_id) AS temp_product_id,
-       INITCAP(REPLACE(COALESCE(product_category_name,'Others'), '_', " ")) AS product_category_name,
-       COALESCE(product_name_length,'NA') AS product_name_length,
-       COALESCE(product_description_length,'NA') AS product_description_length,
-       COALESCE(product_photos_qty, 'NA'),
-       COALESCE(product_weight_g,'NA'),
-       COALESCE(product_length_cm,'NA'),
-       COALESCE(product_height_cm,'NA'),
-       COALESCE(product_width_cm,'NA')
+       INITCAP(REPLACE(COALESCE(product_category_name,'Others'), '_', ' ')) AS product_category_name,
+       COALESCE(product_name_length, 0) AS product_name_length,
+       COALESCE(product_description_length,0) AS product_description_length,
+       COALESCE(product_photos_qty, 0) AS product_photos_qty,
+       COALESCE(product_weight_g,0) AS product_weight_g,
+       COALESCE(product_length_cm,0) AS product_length_cm,
+       COALESCE(product_height_cm,0) AS product_height_cm,
+       COALESCE(product_width_cm,0) AS product_width_cm
 FROM products;
-
 
 -- MNAKING MATERIALISED VIEW FOR Order Items Table
 CREATE MATERIALIZED VIEW v_order_items AS
 SELECT 
 	vo.temp_order_id, 
-	oi.order_item_id, 
-	vp.temp_product_id, 
-	vs.temp_seller_id, 
+	vo.order_id,
+	oi.order_item_id,
+	vp.temp_product_id,
+	vp.product_id,
+	vs.temp_seller_id,
+	vs.seller_id,
 	oi.shipping_limit_date,
 	oi.price,
 	oi.freight_value,
@@ -333,6 +336,7 @@ ON oi.seller_id = vs.seller_id
 CREATE MATERIALIZED VIEW v_order_payments AS
 SELECT 
 	vo.temp_order_id,
+	vo.order_id,
 	payment_sequential,
 	INITCAP(REPLACE(payment_type, '_', ' ')) AS payment_type,
 	payment_installments,
@@ -353,6 +357,7 @@ SELECT
 ors.review_id,
 DENSE_RANK() OVER(ORDER BY ors.review_id) AS temp_review_id,
 vo.temp_order_id,
+vo.order_id,
 ors.review_score,
 CASE
 	WHEN ors.review_score > 3 THEN 'High'
@@ -371,7 +376,7 @@ ON ors.order_id = vo.order_id
 
 -- MNAKING MATERIALISED VIEW FOR New Customer Table
 CREATE MATERIALIZED VIEW v_new_customers AS
-SELECT temp_customer_unique_id, order_purchase_timestamp
+SELECT temp_customer_unique_id, customer_unique_id, order_purchase_timestamp
 FROM (
     SELECT 
         c.customer_unique_id,
@@ -385,7 +390,7 @@ FROM (
 WHERE row_num = 1;
 
 
--- MNAKING MATERIALISED VIEW Name Translation
+-- MNAKING MATERIALISED VIEW FOR Name Translation Table
 CREATE MATERIALIZED VIEW v_name_translation AS
 
 SELECT 
@@ -398,13 +403,33 @@ FROM products AS p
 LEFT JOIN name_translation AS nt
 ON nt.product_category_name = p.product_category_name
 
--- Making Materialised view of customers
- SELECT customer_id,
+-- MAKING MATERIALISED VIEW Customers
+CREATE MATERIALIZED VIEW v_customers AS
+SELECT customer_id,
     DENSE_RANK() OVER (ORDER BY customer_id) AS temp_customer_id,
     customer_unique_id,
     DENSE_RANK() OVER (ORDER BY customer_unique_id) AS temp_customer_unique_id,
     customer_zip_code_prefix,
     initcap(customer_city) AS customer_city,
     customer_state
-   FROM customers c;
+FROM customers c;
+
+-- MAKING MATERIALISED VIEW Sellers
+CREATE MATERIALIZED VIEW v_sellers AS
+SELECT seller_id,
+    DENSE_RANK() OVER (ORDER BY seller_id) AS temp_seller_id,
+    seller_zip_code_prefix,
+    initcap(seller_city) AS seller_city,
+    seller_state
+FROM sellers s;
+
+
+-- MAKING MATERIALISED VIEW Geolocation
+CREATE MATERIALIZED VIEW v_geolocation AS
+SELECT geolocation_zip_code_prefix AS zip_code_prefix,
+    geolocation_lat AS latitude,
+    geolocation_lng AS longnitude,
+    initcap(geolocation_city::text) AS city,
+    geolocation_state AS state
+FROM geolocation;
 
